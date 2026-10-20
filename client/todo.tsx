@@ -220,7 +220,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
           <Pressable accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
             style={{ flex: 1, flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 14, paddingRight: 14 }}>
             <Text style={{ color: i.doneAt ? c.foregroundMuted : c.foreground, fontSize: FS.body, flex: 1, textDecorationLine: i.doneAt ? "line-through" : "none" }} numberOfLines={1}>{itemTitle(i)}</Text>
-            {i.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched</Text> : null}
+            {i.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }} accessibilityLabel="launched">🚀</Text> : null}
             <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{new Date(createdAt(i)).toLocaleDateString()}</Text>
           </Pressable>
         </View>
