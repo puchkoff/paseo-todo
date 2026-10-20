@@ -8,6 +8,7 @@ import { type Item, type TodoDoc, addItem, autoPrompt, itemTitle, launchPrompt, 
 
 const FS = { title: 27, body: 18, small: 16 };
 const PROVIDER = "claude/claude-opus-5-5";
+const MODE = "bypassPermissions"; // same as the other agents; the default mode asks for every command
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -124,7 +125,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
       // A fresh workspace per run; directory source works for git and non-git projects alike.
       const workspace = await paseo.workspaces.create({ source: { kind: "directory", path: project.path }, title: itemTitle(item) });
       const agent = await workspace.agents.create({
-        config: { provider: PROVIDER },
+        config: { provider: PROVIDER, modeId: MODE },
         prompt: launchPrompt(item),
         });
       await change((d) => updateItem(d, item.id, { launchedAt: Date.now() }));
