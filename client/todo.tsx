@@ -77,16 +77,20 @@ function Card({ theme, item, saveLabel, onSave, onRun, onDelete }: CardProps) {
   );
 }
 
-interface Ws { id: string; name: string; project: string }
+interface Project { id: string; name: string; path: string }
 
-// Workspaces of the selected host, loaded once when the picker opens.
-function useWorkspaces(open: boolean): { list: Ws[]; error: string | null } {
+// Projects of the selected host (one per root path), loaded once when the picker opens.
+function useProjects(open: boolean): { list: Project[]; error: string | null } {
   const paseo = usePaseo();
-  const [state, setState] = useState<{ list: Ws[]; error: string | null }>({ list: [], error: null });
+  const [state, setState] = useState<{ list: Project[]; error: string | null }>({ list: [], error: null });
   useEffect(() => {
     if (!open) return;
     paseo.workspaces.list().then(
-      ({ entries }) => setState({ list: entries.filter((w) => !w.archivingAt).map((w) => ({ id: w.id, name: w.name, project: w.projectDisplayName })), error: null }),
+      ({ entries }) => {
+        const byId = new Map<string, Project>();
+        for (const w of entries) if (!w.archivingAt) byId.set(w.projectId, { id: w.projectId, name: w.projectDisplayName, path: w.projectRootPath });
+        setState({ list: [...byId.values()].sort((a, b) => a.name.localeCompare(b.name)), error: null });
+      },
       (e) => setState({ list: [], error: msg(e) }),
     );
   }, [paseo, open]);
@@ -100,7 +104,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   const toast = useToast();
   const [running, setRunning] = useState<Item | null>(null);
   const [open, setOpen] = useState<string | null>(null); // item id, "new", or null for the list
-  const { list, error } = useWorkspaces(running !== null);
+  const { list, error } = useProjects(running !== null);
 
   if (settings.status === "loading") return <Text style={{ color: c.foregroundMuted, fontSize: FS.body, padding: 24 }}>Loading…</Text>;
   if (settings.status !== "ready") {
@@ -114,14 +118,15 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
     return ok;
   }
 
-  async function run(item: Item, workspaceId: string) {
+  async function run(item: Item, project: Project) {
     setRunning(null);
     try {
-      const agent = await paseo.workspaces.ref(workspaceId).agents.create({
+      // A fresh workspace per run; directory source works for git and non-git projects alike.
+      const workspace = await paseo.workspaces.create({ source: { kind: "directory", path: project.path }, title: itemTitle(item) });
+      const agent = await workspace.agents.create({
         config: { provider: PROVIDER },
         prompt: launchPrompt(item),
-        title: itemTitle(item),
-      });
+        });
       await change((d) => updateItem(d, item.id, { launchedAt: Date.now() }));
       navigation?.openAgent({ agentId: agent.id, serverId: host.id });
     } catch (e) {
@@ -167,14 +172,14 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
         </>
       ) : list_}
 
-      <Modal title="Run in which workspace?" open={running !== null} onOpenChange={(o) => !o && setRunning(null)}>
+      <Modal title="Run in a new workspace of…" open={running !== null} onOpenChange={(o) => !o && setRunning(null)}>
         <Modal.Content>
           <View style={{ gap: 6 }}>
             {error ? <Text style={{ color: c.statusDanger, fontSize: FS.small }}>{error}</Text> : null}
             {list.map((w) => (
-              <Pressable key={w.id} accessibilityRole="button" accessibilityLabel={`Run in ${w.name}`} onPress={() => running && void run(running, w.id)}
+              <Pressable key={w.id} accessibilityRole="button" accessibilityLabel={`Run in a new workspace of ${w.name}`} onPress={() => running && void run(running, w)}
                 style={{ paddingVertical: 11, paddingHorizontal: 12, borderRadius: 8, backgroundColor: c.surface2 }}>
-                <Text style={{ color: c.foreground, fontSize: FS.body }}>{w.name} <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{w.project}</Text></Text>
+                <Text style={{ color: c.foreground, fontSize: FS.body }}>{w.name} <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{w.path}</Text></Text>
               </Pressable>
             ))}
           </View>
