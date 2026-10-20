@@ -3,6 +3,7 @@ import { z } from "zod";
 
 export const itemSchema = z.object({
   id: z.string(),
+  title: z.string().default(""),
   todo: z.string(),
   prompt: z.string().default(""),
   launchedAt: z.number().optional(),
@@ -31,3 +32,7 @@ export const removeItem = (d: TodoDoc, id: string): TodoDoc => ({ items: d.items
 
 // Auto-prompt needs a todo; Run needs a prompt, falling back to the todo text.
 export const launchPrompt = (i: Pick<Item, "todo" | "prompt">): string => (i.prompt.trim() || i.todo.trim());
+
+// Items saved before titles existed have an empty one; show the first line of the todo.
+export const itemTitle = (i: Pick<Item, "title" | "todo">): string =>
+  i.title.trim() || i.todo.trim().split("\n")[0].slice(0, 80) || "Untitled";

@@ -4,7 +4,7 @@ import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { type Item, type TodoDoc, addItem, autoPrompt, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
+import { type Item, type TodoDoc, addItem, autoPrompt, itemTitle, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
 
 const FS = { title: 27, body: 18, small: 16 };
 const PROVIDER = "claude/claude-opus-5-5";
@@ -24,30 +24,31 @@ function Btn({ theme, label, tone = "plain", disabled, onPress }: { theme: Plugi
 
 interface CardProps {
   theme: PluginTheme;
-  item: Pick<Item, "todo" | "prompt" | "launchedAt">;
+  item: Pick<Item, "title" | "todo" | "prompt" | "launchedAt">;
   saveLabel: string;
-  onSave: (todo: string, prompt: string) => Promise<boolean>;
+  onSave: (title: string, todo: string, prompt: string) => Promise<boolean>;
   onRun?: () => void;
   onDelete?: () => void;
-  resetOnSave?: boolean;
 }
 
 // Draft state is local; the saved document only changes on Save.
-function Card({ theme, item, saveLabel, onSave, onRun, onDelete, resetOnSave }: CardProps) {
+function Card({ theme, item, saveLabel, onSave, onRun, onDelete }: CardProps) {
   const c = theme.colors;
   const toast = useToast();
   const generate = useRpc(autoPrompt);
+  const [title, setTitle] = useState(item.title);
   const [todo, setTodo] = useState(item.todo);
   const [prompt, setPrompt] = useState(item.prompt);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setTodo(item.todo); setPrompt(item.prompt); }, [item.todo, item.prompt]);
-  const dirty = todo !== item.todo || prompt !== item.prompt;
+  useEffect(() => { setTitle(item.title); setTodo(item.todo); setPrompt(item.prompt); }, [item.title, item.todo, item.prompt]);
+  const dirty = title !== item.title || todo !== item.todo || prompt !== item.prompt;
+  const hasText = !!(title.trim() || todo.trim());
   const field = { color: c.foreground, backgroundColor: c.surface2, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: FS.body };
 
   async function auto() {
     setBusy(true);
     try {
-      setPrompt((await generate({ todo })).prompt);
+      setPrompt((await generate({ todo: [title.trim(), todo.trim()].filter(Boolean).join("\n\n") })).prompt);
     } catch (e) {
       toast.error(`Auto-prompt failed: ${msg(e)}`);
     } finally {
@@ -55,18 +56,19 @@ function Card({ theme, item, saveLabel, onSave, onRun, onDelete, resetOnSave }: 
     }
   }
   async function save() {
-    if (!(await onSave(todo.trim(), prompt)) || !resetOnSave) return;
-    setTodo(""); setPrompt("");
+    await onSave(title.trim(), todo.trim(), prompt);
   }
 
   return (
     <View style={{ gap: 8, padding: 12, borderRadius: 10, backgroundColor: c.surface1 }}>
-      <TextInput value={todo} onChangeText={setTodo} placeholder="Todo" placeholderTextColor={c.foregroundMuted} style={field} />
+      <TextInput value={title} onChangeText={setTitle} placeholder="Title" placeholderTextColor={c.foregroundMuted} style={{ ...field, fontWeight: "600" }} />
+      <TextInput value={todo} onChangeText={setTodo} placeholder="Todo" placeholderTextColor={c.foregroundMuted} multiline
+        style={{ ...field, minHeight: 110, textAlignVertical: "top" }} />
       <TextInput value={prompt} onChangeText={setPrompt} placeholder="Prompt for the agent" placeholderTextColor={c.foregroundMuted} multiline
-        style={{ ...field, minHeight: 90, textAlignVertical: "top" }} />
+        style={{ ...field, minHeight: 360, textAlignVertical: "top" }} />
       <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <Btn theme={theme} label={busy ? "Writing…" : "Auto-prompt"} disabled={busy || !todo.trim()} onPress={() => void auto()} />
-        {dirty || resetOnSave ? <Btn theme={theme} tone="pri" label={saveLabel} disabled={!todo.trim()} onPress={() => void save()} /> : null}
+        <Btn theme={theme} label={busy ? "Writing…" : "Auto-prompt"} disabled={busy || !hasText} onPress={() => void auto()} />
+        {dirty ? <Btn theme={theme} tone="pri" label={saveLabel} disabled={!hasText} onPress={() => void save()} /> : null}
         {onRun ? <Btn theme={theme} tone="pri" label="Run" disabled={dirty} onPress={onRun} /> : null}
         {item.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched {new Date(item.launchedAt).toLocaleString()}</Text> : null}
         {onDelete ? <View style={{ marginLeft: "auto" }}><Btn theme={theme} tone="bad" label="Delete" onPress={onDelete} /></View> : null}
@@ -97,6 +99,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   const paseo = usePaseo();
   const toast = useToast();
   const [running, setRunning] = useState<Item | null>(null);
+  const [open, setOpen] = useState<string | null>(null); // item id, "new", or null for the list
   const { list, error } = useWorkspaces(running !== null);
 
   if (settings.status === "loading") return <Text style={{ color: c.foregroundMuted, fontSize: FS.body, padding: 24 }}>Loading…</Text>;
@@ -117,7 +120,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
       const agent = await paseo.workspaces.ref(workspaceId).agents.create({
         config: { provider: PROVIDER },
         prompt: launchPrompt(item),
-        title: item.todo.slice(0, 80),
+        title: itemTitle(item),
       });
       await change((d) => updateItem(d, item.id, { launchedAt: Date.now() }));
       navigation?.openAgent({ agentId: agent.id, serverId: host.id });
@@ -127,18 +130,42 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   }
 
   const doc: TodoDoc = settings.values;
-  return (
-    <ScrollView style={{ flex: 1, backgroundColor: c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 24, gap: 12, maxWidth: 860, width: "100%", alignSelf: "center" }}>
-      <Text style={{ color: c.foreground, fontSize: FS.title, fontWeight: "600" }}>
-        Todo <Text style={{ color: c.foregroundMuted, fontSize: FS.small, fontWeight: "400" }}>{host.label}</Text>
-      </Text>
-      <Card theme={theme} item={{ todo: "", prompt: "" }} saveLabel="Add" resetOnSave onSave={(todo, prompt) => change((d) => addItem(d, { id: newId(), todo, prompt }))} />
+  const current = open && open !== "new" ? doc.items.find((i) => i.id === open) : undefined;
+  const list_ = (
+    <>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <Text style={{ color: c.foreground, fontSize: FS.title, fontWeight: "600", flex: 1 }}>
+          Todo <Text style={{ color: c.foregroundMuted, fontSize: FS.small, fontWeight: "400" }}>{host.label}</Text>
+        </Text>
+        <Btn theme={theme} tone="pri" label="New task" onPress={() => setOpen("new")} />
+      </View>
       {doc.items.map((i) => (
-        <Card key={i.id} theme={theme} item={i} saveLabel="Save"
-          onSave={(todo, prompt) => change((d) => updateItem(d, i.id, { todo, prompt }))}
-          onRun={() => setRunning(i)} onDelete={() => void change((d) => removeItem(d, i.id))} />
+        <Pressable key={i.id} accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
+          style={{ flexDirection: "row", gap: 10, alignItems: "center", padding: 14, borderRadius: 10, backgroundColor: c.surface1 }}>
+          <Text style={{ color: c.foreground, fontSize: FS.body, flex: 1 }} numberOfLines={1}>{itemTitle(i)}</Text>
+          {i.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched</Text> : null}
+        </Pressable>
       ))}
       {doc.items.length === 0 ? <Text style={{ color: c.foregroundMuted, textAlign: "center", fontSize: FS.body, paddingVertical: 30 }}>Nothing parked yet.</Text> : null}
+    </>
+  );
+  const card = open === "new" ? (
+    <Card theme={theme} item={{ title: "", todo: "", prompt: "" }} saveLabel="Add"
+      onSave={async (title, todo, prompt) => { const ok = await change((d) => addItem(d, { id: newId(), title, todo, prompt })); if (ok) setOpen(null); return ok; }} />
+  ) : current ? (
+    <Card theme={theme} item={current} saveLabel="Save"
+      onSave={(title, todo, prompt) => change((d) => updateItem(d, current.id, { title, todo, prompt }))}
+      onRun={() => setRunning(current)} onDelete={() => void change((d) => removeItem(d, current.id)).then((ok) => ok && setOpen(null))} />
+  ) : null;
+
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 24, gap: 12, maxWidth: 860, width: "100%", alignSelf: "center" }}>
+      {card ? (
+        <>
+          <View style={{ flexDirection: "row" }}><Btn theme={theme} label="← Tasks" onPress={() => setOpen(null)} /></View>
+          {card}
+        </>
+      ) : list_}
 
       <Modal title="Run in which workspace?" open={running !== null} onOpenChange={(o) => !o && setRunning(null)}>
         <Modal.Content>
