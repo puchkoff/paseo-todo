@@ -91,7 +91,7 @@ function Card({ theme, item, saveLabel, onSave, onRun, onOpenAgent, onToggleDone
         {item.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched {new Date(item.launchedAt).toLocaleString()}</Text> : null}
         {onDelete ? <View style={{ marginLeft: "auto" }}><Btn theme={theme} tone="bad" label="Delete" onPress={onDelete} /></View> : null}
       </View>
-      {!!item.runs?.length && onOpenAgent ?  (
+      {!!item.runs?.length && onOpenAgent ? (
         <View style={{ gap: 6 }}>
           <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>Agents run on this task</Text>
           {[...item.runs].reverse().map((r) => (
