@@ -1,0 +1,158 @@
+import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginScreenProps } from "@getpaseo/plugin/client";
+import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
+import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
+import { useEffect, useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { type Item, type TodoDoc, addItem, autoPrompt, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
+
+const FS = { title: 27, body: 18, small: 16 };
+const PROVIDER = "claude/claude-opus-5-5";
+const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+function Btn({ theme, label, tone = "plain", disabled, onPress }: { theme: PluginTheme; label: string; tone?: "pri" | "bad" | "plain"; disabled?: boolean; onPress: () => void }) {
+  const c = theme.colors;
+  const bg = { pri: c.accent, bad: c.statusDanger, plain: c.surface2 }[tone];
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress}
+      style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: bg, opacity: disabled ? 0.5 : 1 }}>
+      <Text style={{ color: tone === "plain" ? c.foreground : c.accentForeground, fontSize: FS.small }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+interface CardProps {
+  theme: PluginTheme;
+  item: Pick<Item, "todo" | "prompt" | "launchedAt">;
+  saveLabel: string;
+  onSave: (todo: string, prompt: string) => Promise<boolean>;
+  onRun?: () => void;
+  onDelete?: () => void;
+  resetOnSave?: boolean;
+}
+
+// Draft state is local; the saved document only changes on Save.
+function Card({ theme, item, saveLabel, onSave, onRun, onDelete, resetOnSave }: CardProps) {
+  const c = theme.colors;
+  const toast = useToast();
+  const generate = useRpc(autoPrompt);
+  const [todo, setTodo] = useState(item.todo);
+  const [prompt, setPrompt] = useState(item.prompt);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setTodo(item.todo); setPrompt(item.prompt); }, [item.todo, item.prompt]);
+  const dirty = todo !== item.todo || prompt !== item.prompt;
+  const field = { color: c.foreground, backgroundColor: c.surface2, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: FS.body };
+
+  async function auto() {
+    setBusy(true);
+    try {
+      setPrompt((await generate({ todo })).prompt);
+    } catch (e) {
+      toast.error(`Auto-prompt failed: ${msg(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save() {
+    if (!(await onSave(todo.trim(), prompt)) || !resetOnSave) return;
+    setTodo(""); setPrompt("");
+  }
+
+  return (
+    <View style={{ gap: 8, padding: 12, borderRadius: 10, backgroundColor: c.surface1 }}>
+      <TextInput value={todo} onChangeText={setTodo} placeholder="Todo" placeholderTextColor={c.foregroundMuted} style={field} />
+      <TextInput value={prompt} onChangeText={setPrompt} placeholder="Prompt for the agent" placeholderTextColor={c.foregroundMuted} multiline
+        style={{ ...field, minHeight: 90, textAlignVertical: "top" }} />
+      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <Btn theme={theme} label={busy ? "Writing…" : "Auto-prompt"} disabled={busy || !todo.trim()} onPress={() => void auto()} />
+        {dirty || resetOnSave ? <Btn theme={theme} tone="pri" label={saveLabel} disabled={!todo.trim()} onPress={() => void save()} /> : null}
+        {onRun ? <Btn theme={theme} tone="pri" label="Run" disabled={dirty} onPress={onRun} /> : null}
+        {item.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched {new Date(item.launchedAt).toLocaleString()}</Text> : null}
+        {onDelete ? <View style={{ marginLeft: "auto" }}><Btn theme={theme} tone="bad" label="Delete" onPress={onDelete} /></View> : null}
+      </View>
+    </View>
+  );
+}
+
+interface Ws { id: string; name: string; project: string }
+
+// Workspaces of the selected host, loaded once when the picker opens.
+function useWorkspaces(open: boolean): { list: Ws[]; error: string | null } {
+  const paseo = usePaseo();
+  const [state, setState] = useState<{ list: Ws[]; error: string | null }>({ list: [], error: null });
+  useEffect(() => {
+    if (!open) return;
+    paseo.workspaces.list().then(
+      ({ entries }) => setState({ list: entries.filter((w) => !w.archivingAt).map((w) => ({ id: w.id, name: w.name, project: w.projectDisplayName })), error: null }),
+      (e) => setState({ list: [], error: msg(e) }),
+    );
+  }, [paseo, open]);
+  return state;
+}
+
+export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProps) {
+  const c = theme.colors;
+  const settings = useSettings(todoSettings);
+  const paseo = usePaseo();
+  const toast = useToast();
+  const [running, setRunning] = useState<Item | null>(null);
+  const { list, error } = useWorkspaces(running !== null);
+
+  if (settings.status === "loading") return <Text style={{ color: c.foregroundMuted, fontSize: FS.body, padding: 24 }}>Loading…</Text>;
+  if (settings.status !== "ready") {
+    return <Text style={{ color: c.statusDanger, fontSize: FS.body, padding: 24 }}>Todo is unavailable on {host.label}: {settings.status === "error" || settings.status === "invalid" ? settings.error : ""}</Text>;
+  }
+
+  async function change(fn: (d: TodoDoc) => TodoDoc): Promise<boolean> {
+    if (settings.status !== "ready") return false;
+    const ok = await settings.save(fn(settings.values), settings.revision);
+    if (!ok) toast.error("Could not save. The list changed elsewhere; try again.");
+    return ok;
+  }
+
+  async function run(item: Item, workspaceId: string) {
+    setRunning(null);
+    try {
+      const agent = await paseo.workspaces.ref(workspaceId).agents.create({
+        config: { provider: PROVIDER },
+        prompt: launchPrompt(item),
+        title: item.todo.slice(0, 80),
+      });
+      await change((d) => updateItem(d, item.id, { launchedAt: Date.now() }));
+      navigation?.openAgent({ agentId: agent.id, serverId: host.id });
+    } catch (e) {
+      toast.error(`Could not start the agent: ${msg(e)}`);
+    }
+  }
+
+  const doc: TodoDoc = settings.values;
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 24, gap: 12, maxWidth: 860, width: "100%", alignSelf: "center" }}>
+      <Text style={{ color: c.foreground, fontSize: FS.title, fontWeight: "600" }}>
+        Todo <Text style={{ color: c.foregroundMuted, fontSize: FS.small, fontWeight: "400" }}>{host.label}</Text>
+      </Text>
+      <Card theme={theme} item={{ todo: "", prompt: "" }} saveLabel="Add" resetOnSave onSave={(todo, prompt) => change((d) => addItem(d, { id: newId(), todo, prompt }))} />
+      {doc.items.map((i) => (
+        <Card key={i.id} theme={theme} item={i} saveLabel="Save"
+          onSave={(todo, prompt) => change((d) => updateItem(d, i.id, { todo, prompt }))}
+          onRun={() => setRunning(i)} onDelete={() => void change((d) => removeItem(d, i.id))} />
+      ))}
+      {doc.items.length === 0 ? <Text style={{ color: c.foregroundMuted, textAlign: "center", fontSize: FS.body, paddingVertical: 30 }}>Nothing parked yet.</Text> : null}
+
+      <Modal title="Run in which workspace?" open={running !== null} onOpenChange={(o) => !o && setRunning(null)}>
+        <Modal.Content>
+          <View style={{ gap: 6 }}>
+            {error ? <Text style={{ color: c.statusDanger, fontSize: FS.small }}>{error}</Text> : null}
+            {list.map((w) => (
+              <Pressable key={w.id} accessibilityRole="button" accessibilityLabel={`Run in ${w.name}`} onPress={() => running && void run(running, w.id)}
+                style={{ paddingVertical: 11, paddingHorizontal: 12, borderRadius: 8, backgroundColor: c.surface2 }}>
+                <Text style={{ color: c.foreground, fontSize: FS.body }}>{w.name} <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{w.project}</Text></Text>
+              </Pressable>
+            ))}
+          </View>
+        </Modal.Content>
+      </Modal>
+    </ScrollView>
+  );
+}

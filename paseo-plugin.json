@@ -1,0 +1,9 @@
+{
+  "id": "paseo-todo",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.11.4"
+  },
+  "name": "Todo",
+  "description": "Park tasks with a prompt and launch an agent from them later."
+}
