@@ -4,7 +4,7 @@ import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, autoPrompt, createdAt, filterItems, itemTitle, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
+import { type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, createdAt, filterItems, itemTitle, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
 
 const FS = { title: 27, body: 18, small: 16 };
 const PROVIDER = "claude/claude-opus-5-5";
@@ -39,16 +39,17 @@ function Chips<T extends string>({ theme, value, options, onChange }: { theme: P
 
 interface CardProps {
   theme: PluginTheme;
-  item: Pick<Item, "title" | "todo" | "prompt" | "launchedAt" | "doneAt">;
+  item: Pick<Item, "title" | "todo" | "prompt" | "launchedAt" | "doneAt"> & { runs?: Item["runs"] };
   saveLabel: string;
   onSave: (title: string, todo: string, prompt: string) => Promise<boolean>;
   onRun?: () => void;
+  onOpenAgent?: (agentId: string) => void;
   onToggleDone?: () => void;
   onDelete?: () => void;
 }
 
 // Draft state is local; the saved document only changes on Save.
-function Card({ theme, item, saveLabel, onSave, onRun, onToggleDone, onDelete }: CardProps) {
+function Card({ theme, item, saveLabel, onSave, onRun, onOpenAgent, onToggleDone, onDelete }: CardProps) {
   const c = theme.colors;
   const toast = useToast();
   const generate = useRpc(autoPrompt);
@@ -90,6 +91,17 @@ function Card({ theme, item, saveLabel, onSave, onRun, onToggleDone, onDelete }:
         {item.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched {new Date(item.launchedAt).toLocaleString()}</Text> : null}
         {onDelete ? <View style={{ marginLeft: "auto" }}><Btn theme={theme} tone="bad" label="Delete" onPress={onDelete} /></View> : null}
       </View>
+      {!!item.runs?.length && onOpenAgent ?  (
+        <View style={{ gap: 6 }}>
+          <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>Agents run on this task</Text>
+          {[...item.runs].reverse().map((r) => (
+            <View key={r.agentId} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ color: c.foreground, fontSize: FS.small, flex: 1 }}>{new Date(r.at).toLocaleString()}</Text>
+              <Btn theme={theme} label="Open agent" onPress={() => onOpenAgent(r.agentId)} />
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -146,7 +158,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
         config: { provider: PROVIDER, modeId: MODE },
         prompt: launchPrompt(item),
         });
-      await change((d) => updateItem(d, item.id, { launchedAt: Date.now() }));
+      await change((d) => addRun(d, item.id, agent.id, Date.now()));
       navigation?.openAgent({ agentId: agent.id, serverId: host.id });
     } catch (e) {
       toast.error(`Could not start the agent: ${msg(e)}`);
@@ -186,11 +198,11 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   );
   const card = open === "new" ? (
     <Card theme={theme} item={{ title: "", todo: "", prompt: "" }} saveLabel="Add"
-      onSave={async (title, todo, prompt) => { const ok = await change((d) => addItem(d, { id: newId(), title, todo, prompt })); if (ok) setOpen(null); return ok; }} />
+      onSave={async (title, todo, prompt) => { const ok = await change((d) => addItem(d, { id: newId(), title, todo, prompt, runs: [] })); if (ok) setOpen(null); return ok; }} />
   ) : current ? (
     <Card theme={theme} item={current} saveLabel="Save"
       onSave={(title, todo, prompt) => change((d) => updateItem(d, current.id, { title, todo, prompt }))}
-      onRun={() => setRunning(current)} onToggleDone={() => void toggleDone(current)} onDelete={() => void change((d) => removeItem(d, current.id)).then((ok) => ok && setOpen(null))} />
+      onRun={() => setRunning(current)} onOpenAgent={(agentId) => navigation?.openAgent({ agentId, serverId: host.id })} onToggleDone={() => void toggleDone(current)} onDelete={() => void change((d) => removeItem(d, current.id)).then((ok) => ok && setOpen(null))} />
   ) : null;
 
   return (

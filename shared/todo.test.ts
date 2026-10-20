@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addItem, createdAt, filterItems, itemTitle, launchPrompt, removeItem, updateItem } from "./todo.ts";
+import { addItem, addRun, createdAt, filterItems, itemTitle, launchPrompt, removeItem, updateItem } from "./todo.ts";
 
 test("add puts the newest first, update and remove target one id", () => {
-  let d = addItem({ items: [] }, { id: "a", title: "A", todo: "A", prompt: "" });
-  d = addItem(d, { id: "b", title: "B", todo: "B", prompt: "" });
+  let d = addItem({ items: [] }, { id: "a", title: "A", todo: "A", prompt: "", runs: [] });
+  d = addItem(d, { id: "b", title: "B", todo: "B", prompt: "", runs: [] });
   assert.deepEqual(d.items.map((i) => i.id), ["b", "a"]);
   d = updateItem(d, "a", { prompt: "do A" });
   assert.equal(d.items[1].prompt, "do A");
   assert.equal(d.items[0].prompt, "");
   assert.deepEqual(removeItem(d, "b").items.map((i) => i.id), ["a"]);
+});
+
+test("runs accumulate per task and stamp launchedAt", () => {
+  let d = addItem({ items: [] }, { id: "a", title: "", todo: "A", prompt: "", runs: [] });
+  d = addRun(addRun(d, "a", "ag1", 1), "a", "ag2", 2);
+  assert.deepEqual(d.items[0].runs, [{ agentId: "ag1", at: 1 }, { agentId: "ag2", at: 2 }]);
+  assert.equal(d.items[0].launchedAt, 2);
 });
 
 test("launch prompt falls back to the todo text", () => {
@@ -26,7 +33,7 @@ test("title falls back to the first todo line", () => {
 test("created time comes from the id and filters combine with status", () => {
   const now = new Date("2026-10-20T12:00:00").getTime();
   const id = (t: number) => `${t.toString(36)}abcd`;
-  const mk = (t: number, doneAt?: number) => ({ id: id(t), title: "", todo: "x", prompt: "", doneAt });
+  const mk = (t: number, doneAt?: number) => ({ id: id(t), title: "", todo: "x", prompt: "", runs: [], doneAt });
   const today = mk(now - 3_600_000), old = mk(now - 40 * 86_400_000, 1), week = mk(now - 3 * 86_400_000);
   assert.equal(createdAt(today), now - 3_600_000);
   const all = [today, week, old];

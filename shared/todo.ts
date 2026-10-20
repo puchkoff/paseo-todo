@@ -7,6 +7,7 @@ export const itemSchema = z.object({
   todo: z.string(),
   prompt: z.string().default(""),
   launchedAt: z.number().optional(),
+  runs: z.array(z.object({ agentId: z.string(), at: z.number() })).default([]),
   doneAt: z.number().optional(),
 });
 export type Item = z.infer<typeof itemSchema>;
@@ -28,6 +29,10 @@ export const autoPrompt = defineRpc({
 export const addItem = (d: TodoDoc, item: Item): TodoDoc => ({ items: [item, ...d.items] });
 export const updateItem = (d: TodoDoc, id: string, patch: Partial<Omit<Item, "id">>): TodoDoc => ({
   items: d.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
+});
+// Appends to the stored runs, so concurrent launches of one task both survive.
+export const addRun = (d: TodoDoc, id: string, agentId: string, at: number): TodoDoc => ({
+  items: d.items.map((i) => (i.id === id ? { ...i, launchedAt: at, runs: [...i.runs, { agentId, at }] } : i)),
 });
 export const removeItem = (d: TodoDoc, id: string): TodoDoc => ({ items: d.items.filter((i) => i.id !== id) });
 
