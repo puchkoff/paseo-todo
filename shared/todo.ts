@@ -59,3 +59,7 @@ export function filterItems(items: Item[], status: StatusFilter, range: RangeFil
 export type Column = "todo" | "progress" | "done";
 export const columnOf = (i: Pick<Item, "doneAt" | "runs" | "launchedAt">): Column =>
   i.doneAt ? "done" : i.runs.length || i.launchedAt ? "progress" : "todo";
+
+// How many of the task's agents are in the running set.
+export const runningCount = (i: Pick<Item, "runs">, running: ReadonlySet<string>): number =>
+  i.runs.filter((r) => running.has(r.agentId)).length;

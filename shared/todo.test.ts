@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Item, addItem, addRun, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, updateItem } from "./todo.ts";
+import { type Item, addItem, addRun, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, runningCount, updateItem } from "./todo.ts";
 
 test("add puts the newest first, update and remove target one id", () => {
   let d = addItem({ items: [] }, { id: "a", title: "A", todo: "A", prompt: "", runs: [] });
@@ -50,4 +50,10 @@ test("columnOf: done beats started, started beats todo", () => {
   assert.equal(columnOf({ ...base, launchedAt: 1 }), "progress");
   assert.equal(columnOf({ runs: [{ agentId: "a", at: 1 }] }), "progress");
   assert.equal(columnOf({ runs: [{ agentId: "a", at: 1 }], doneAt: 2 }), "done");
+});
+
+test("runningCount counts only the task's agents that are running", () => {
+  const runs = [{ agentId: "a", at: 1 }, { agentId: "b", at: 2 }];
+  assert.equal(runningCount({ runs }, new Set(["b", "zzz"])), 1);
+  assert.equal(runningCount({ runs }, new Set()), 0);
 });

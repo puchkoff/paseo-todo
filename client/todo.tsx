@@ -4,7 +4,7 @@ import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { type Column, type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
+import { type Column, type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, runningCount, todoSettings, updateItem } from "../shared/todo.ts";
 
 const FS = { title: 27, body: 18, small: 16 };
 const PROVIDER = "claude/claude-opus-5-5";
@@ -135,6 +135,24 @@ function useProjects(open: boolean): { list: Project[]; error: string | null } {
   return state;
 }
 
+// Ids of this host's running agents, polled; the plugin API has no live subscription for a list.
+function useRunningAgents(pollMs = 5000): ReadonlySet<string> {
+  const paseo = usePaseo();
+  const [ids, setIds] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const load = () => paseo.agents.list({ filter: { statuses: ["running"], includeArchived: false }, page: { limit: 200 } })
+      .then(({ entries }) => setIds(new Set(entries.map((e) => e.agent.id))), () => {});
+    void load();
+    const t = setInterval(() => void load(), pollMs);
+    return () => clearInterval(t);
+  }, [paseo, pollMs]);
+  return ids;
+}
+
+// 🟢 plus a count when several agents of one task run at once.
+const Live = ({ theme, n }: { theme: PluginTheme; n: number }) =>
+  n ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: FS.small }} accessibilityLabel={`${n} agent${n > 1 ? "s" : ""} running`}>🟢{n > 1 ? n : ""}</Text> : null;
+
 export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProps) {
   const c = theme.colors;
   const settings = useSettings(todoSettings);
@@ -147,6 +165,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   const [open, setOpenState] = useState<string | null>(loadOpen); // item id, "new", or null for the list
   const setOpen = (id: string | null) => { saveOpen(id); setOpenState(id); };
   const { list, error } = useProjects(running !== null);
+  const live = useRunningAgents();
 
   if (settings.status === "loading") return <Text style={{ color: c.foregroundMuted, fontSize: FS.body, padding: 24 }}>Loading…</Text>;
   if (settings.status !== "ready") {
@@ -204,7 +223,10 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
                   <Pressable key={i.id} accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
                     style={{ gap: 4, padding: 12, borderRadius: 8, backgroundColor: c.surface2 }}>
                     <Text style={{ color: c.foreground, fontSize: FS.body }} numberOfLines={3}>{itemTitle(i)}</Text>
-                    <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{new Date(createdAt(i)).toLocaleDateString()}</Text>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{new Date(createdAt(i)).toLocaleDateString()}</Text>
+                      <Live theme={theme} n={runningCount(i, live)} />
+                    </View>
                   </Pressable>
                 ))}
               </View>
@@ -220,6 +242,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
           <Pressable accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
             style={{ flex: 1, flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 14, paddingRight: 14 }}>
             <Text style={{ color: i.doneAt ? c.foregroundMuted : c.foreground, fontSize: FS.body, flex: 1, textDecorationLine: i.doneAt ? "line-through" : "none" }} numberOfLines={1}>{itemTitle(i)}</Text>
+            <Live theme={theme} n={runningCount(i, live)} />
             {i.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }} accessibilityLabel="launched">🚀</Text> : null}
             <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{new Date(createdAt(i)).toLocaleDateString()}</Text>
           </Pressable>
