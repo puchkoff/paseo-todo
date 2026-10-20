@@ -7,6 +7,7 @@ export const itemSchema = z.object({
   todo: z.string(),
   prompt: z.string().default(""),
   launchedAt: z.number().optional(),
+  doneAt: z.number().optional(),
 });
 export type Item = z.infer<typeof itemSchema>;
 
@@ -36,3 +37,15 @@ export const launchPrompt = (i: Pick<Item, "todo" | "prompt">): string => (i.pro
 // Items saved before titles existed have an empty one; show the first line of the todo.
 export const itemTitle = (i: Pick<Item, "title" | "todo">): string =>
   i.title.trim() || i.todo.trim().split("\n")[0].slice(0, 80) || "Untitled";
+
+// Ids start with Date.now() in base 36 (see newId in client/todo.tsx), so no separate created field is stored.
+export const createdAt = (i: Pick<Item, "id">): number => parseInt(i.id.slice(0, 8), 36);
+
+export type StatusFilter = "all" | "open" | "done";
+export type RangeFilter = "any" | "today" | "week" | "month";
+const DAY = 86_400_000;
+
+export function filterItems(items: Item[], status: StatusFilter, range: RangeFilter, now: number): Item[] {
+  const since = { any: 0, today: new Date(now).setHours(0, 0, 0, 0), week: now - 7 * DAY, month: now - 30 * DAY }[range];
+  return items.filter((i) => (status === "all" || (status === "done") === !!i.doneAt) && createdAt(i) >= since);
+}

@@ -4,7 +4,7 @@ import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { type Item, type TodoDoc, addItem, autoPrompt, itemTitle, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
+import { type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, autoPrompt, createdAt, filterItems, itemTitle, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
 
 const FS = { title: 27, body: 18, small: 16 };
 const PROVIDER = "claude/claude-opus-5-5";
@@ -23,17 +23,32 @@ function Btn({ theme, label, tone = "plain", disabled, onPress }: { theme: Plugi
   );
 }
 
+function Chips<T extends string>({ theme, value, options, onChange }: { theme: PluginTheme; value: T; options: [T, string][]; onChange: (v: T) => void }) {
+  const c = theme.colors;
+  return (
+    <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+      {options.map(([v, label]) => (
+        <Pressable key={v} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: v === value }} onPress={() => onChange(v)}
+          style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: v === value ? c.accent : c.surface2 }}>
+          <Text style={{ color: v === value ? c.accentForeground : c.foreground, fontSize: FS.small }}>{label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 interface CardProps {
   theme: PluginTheme;
-  item: Pick<Item, "title" | "todo" | "prompt" | "launchedAt">;
+  item: Pick<Item, "title" | "todo" | "prompt" | "launchedAt" | "doneAt">;
   saveLabel: string;
   onSave: (title: string, todo: string, prompt: string) => Promise<boolean>;
   onRun?: () => void;
+  onToggleDone?: () => void;
   onDelete?: () => void;
 }
 
 // Draft state is local; the saved document only changes on Save.
-function Card({ theme, item, saveLabel, onSave, onRun, onDelete }: CardProps) {
+function Card({ theme, item, saveLabel, onSave, onRun, onToggleDone, onDelete }: CardProps) {
   const c = theme.colors;
   const toast = useToast();
   const generate = useRpc(autoPrompt);
@@ -71,6 +86,7 @@ function Card({ theme, item, saveLabel, onSave, onRun, onDelete }: CardProps) {
         <Btn theme={theme} label={busy ? "Writing…" : "Auto-prompt"} disabled={busy || !hasText} onPress={() => void auto()} />
         {dirty ? <Btn theme={theme} tone="pri" label={saveLabel} disabled={!hasText} onPress={() => void save()} /> : null}
         {onRun ? <Btn theme={theme} tone="pri" label="Run" disabled={dirty} onPress={onRun} /> : null}
+        {onToggleDone ? <Btn theme={theme} label={item.doneAt ? "Reopen" : "Mark done"} disabled={dirty} onPress={onToggleDone} /> : null}
         {item.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched {new Date(item.launchedAt).toLocaleString()}</Text> : null}
         {onDelete ? <View style={{ marginLeft: "auto" }}><Btn theme={theme} tone="bad" label="Delete" onPress={onDelete} /></View> : null}
       </View>
@@ -104,6 +120,8 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   const paseo = usePaseo();
   const toast = useToast();
   const [running, setRunning] = useState<Item | null>(null);
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [range, setRange] = useState<RangeFilter>("any");
   const [open, setOpen] = useState<string | null>(null); // item id, "new", or null for the list
   const { list, error } = useProjects(running !== null);
 
@@ -136,6 +154,8 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   }
 
   const doc: TodoDoc = settings.values;
+  const toggleDone = (i: Item) => change((d) => updateItem(d, i.id, { doneAt: i.doneAt ? undefined : Date.now() }));
+  const shown = filterItems(doc.items, status, range, Date.now());
   const current = open && open !== "new" ? doc.items.find((i) => i.id === open) : undefined;
   const list_ = (
     <>
@@ -145,14 +165,23 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
         </Text>
         <Btn theme={theme} tone="pri" label="New task" onPress={() => setOpen("new")} />
       </View>
-      {doc.items.map((i) => (
-        <Pressable key={i.id} accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
-          style={{ flexDirection: "row", gap: 10, alignItems: "center", padding: 14, borderRadius: 10, backgroundColor: c.surface1 }}>
-          <Text style={{ color: c.foreground, fontSize: FS.body, flex: 1 }} numberOfLines={1}>{itemTitle(i)}</Text>
-          {i.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched</Text> : null}
-        </Pressable>
+      <Chips theme={theme} value={status} onChange={setStatus} options={[["all", "All"], ["open", "Open"], ["done", "Done"]]} />
+      <Chips theme={theme} value={range} onChange={setRange} options={[["any", "Any time"], ["today", "Today"], ["week", "7 days"], ["month", "30 days"]]} />
+      {shown.map((i) => (
+        <View key={i.id} style={{ flexDirection: "row", gap: 6, alignItems: "center", borderRadius: 10, backgroundColor: c.surface1 }}>
+          <Pressable accessibilityRole="checkbox" accessibilityLabel={i.doneAt ? `Reopen ${itemTitle(i)}` : `Mark ${itemTitle(i)} done`} accessibilityState={{ checked: !!i.doneAt }} onPress={() => void toggleDone(i)}
+            style={{ padding: 14 }}>
+            <Text style={{ color: i.doneAt ? c.statusSuccess : c.foregroundMuted, fontSize: FS.body + 4 }}>{i.doneAt ? "☑" : "☐"}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
+            style={{ flex: 1, flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 14, paddingRight: 14 }}>
+            <Text style={{ color: i.doneAt ? c.foregroundMuted : c.foreground, fontSize: FS.body, flex: 1, textDecorationLine: i.doneAt ? "line-through" : "none" }} numberOfLines={1}>{itemTitle(i)}</Text>
+            {i.launchedAt ? <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>launched</Text> : null}
+            <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{new Date(createdAt(i)).toLocaleDateString()}</Text>
+          </Pressable>
+        </View>
       ))}
-      {doc.items.length === 0 ? <Text style={{ color: c.foregroundMuted, textAlign: "center", fontSize: FS.body, paddingVertical: 30 }}>Nothing parked yet.</Text> : null}
+      {shown.length === 0 ? <Text style={{ color: c.foregroundMuted, textAlign: "center", fontSize: FS.body, paddingVertical: 30 }}>{doc.items.length === 0 ? "Nothing parked yet." : "No tasks match the filters."}</Text> : null}
     </>
   );
   const card = open === "new" ? (
@@ -161,7 +190,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   ) : current ? (
     <Card theme={theme} item={current} saveLabel="Save"
       onSave={(title, todo, prompt) => change((d) => updateItem(d, current.id, { title, todo, prompt }))}
-      onRun={() => setRunning(current)} onDelete={() => void change((d) => removeItem(d, current.id)).then((ok) => ok && setOpen(null))} />
+      onRun={() => setRunning(current)} onToggleDone={() => void toggleDone(current)} onDelete={() => void change((d) => removeItem(d, current.id)).then((ok) => ok && setOpen(null))} />
   ) : null;
 
   return (
