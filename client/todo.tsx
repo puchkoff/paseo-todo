@@ -10,6 +10,15 @@ const FS = { title: 27, body: 18, small: 16 };
 const PROVIDER = "claude/claude-opus-5-5";
 const MODE = "bypassPermissions"; // same as the other agents; the default mode asks for every command
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+// Last opened task, kept across visits: localStorage where the client has it, else module memory (lost on reload).
+const OPEN_KEY = "paseo-todo.open";
+const store = (globalThis as { localStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem"> }).localStorage;
+let lastOpen: string | null = null;
+const loadOpen = () => store?.getItem(OPEN_KEY) ?? lastOpen;
+function saveOpen(id: string | null) {
+  lastOpen = id;
+  if (id) store?.setItem(OPEN_KEY, id); else store?.removeItem(OPEN_KEY);
+}
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function Btn({ theme, label, tone = "plain", disabled, onPress }: { theme: PluginTheme; label: string; tone?: "pri" | "bad" | "plain"; disabled?: boolean; onPress: () => void }) {
@@ -134,7 +143,8 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   const [running, setRunning] = useState<Item | null>(null);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [range, setRange] = useState<RangeFilter>("any");
-  const [open, setOpen] = useState<string | null>(null); // item id, "new", or null for the list
+  const [open, setOpenState] = useState<string | null>(loadOpen); // item id, "new", or null for the list
+  const setOpen = (id: string | null) => { saveOpen(id); setOpenState(id); };
   const { list, error } = useProjects(running !== null);
 
   if (settings.status === "loading") return <Text style={{ color: c.foregroundMuted, fontSize: FS.body, padding: 24 }}>Loading…</Text>;

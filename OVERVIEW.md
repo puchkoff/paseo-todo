@@ -6,4 +6,4 @@ Each task can be marked done, and the list filters by status (all, open, done) a
 
 Run asks which project to use, creates a new workspace in that project directory, and starts a Claude agent in it with the prompt, or with the todo text when the prompt is empty.
 
-Each Run is remembered on the task: its card lists the agents started from it, with a button to open each one. Runs started before this was added have no agent link.
+Each Run is remembered on the task: its card lists the agents started from it, with a button to open each one. Runs started before this was added have no agent link. The task you had open is reopened the next time you visit the screen.
