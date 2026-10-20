@@ -1,5 +1,7 @@
 # Todo — a Paseo plugin
 
+![Todo: Paseo plugin screen (illustration)](docs/hero.svg)
+
 Park tasks with a prompt and launch an agent from them later.
 
 Keeps a list of tasks, each with a short todo and a prompt. **Run** creates a workspace in a project you pick and starts a Claude agent with the prompt (or the todo text if the prompt is empty). Each task remembers its runs, with buttons to open the agent and workspace.
