@@ -14,8 +14,8 @@ test("add puts the newest first, update and remove target one id", () => {
 
 test("runs accumulate per task and stamp launchedAt", () => {
   let d = addItem({ items: [] }, { id: "a", title: "", todo: "A", prompt: "", runs: [] });
-  d = addRun(addRun(d, "a", "ag1", 1), "a", "ag2", 2);
-  assert.deepEqual(d.items[0].runs, [{ agentId: "ag1", at: 1 }, { agentId: "ag2", at: 2 }]);
+  d = addRun(addRun(d, "a", "ag1", 1), "a", "ag2", 2, "ws2");
+  assert.deepEqual(d.items[0].runs, [{ agentId: "ag1", at: 1, workspaceId: undefined }, { agentId: "ag2", at: 2, workspaceId: "ws2" }]);
   assert.equal(d.items[0].launchedAt, 2);
 });
 

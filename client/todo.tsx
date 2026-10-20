@@ -53,12 +53,13 @@ interface CardProps {
   onSave: (title: string, todo: string, prompt: string) => Promise<boolean>;
   onRun?: () => void;
   onOpenAgent?: (agentId: string) => void;
+  onOpenWorkspace?: (run: Item["runs"][number]) => void;
   onToggleDone?: () => void;
   onDelete?: () => void;
 }
 
 // Draft state is local; the saved document only changes on Save.
-function Card({ theme, item, saveLabel, onSave, onRun, onOpenAgent, onToggleDone, onDelete }: CardProps) {
+function Card({ theme, item, saveLabel, onSave, onRun, onOpenAgent, onOpenWorkspace, onToggleDone, onDelete }: CardProps) {
   const c = theme.colors;
   const toast = useToast();
   const generate = useRpc(autoPrompt);
@@ -106,6 +107,7 @@ function Card({ theme, item, saveLabel, onSave, onRun, onOpenAgent, onToggleDone
           {[...item.runs].reverse().map((r) => (
             <View key={r.agentId} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Text style={{ color: c.foreground, fontSize: FS.small, flex: 1 }}>{new Date(r.at).toLocaleString()}</Text>
+              {onOpenWorkspace ? <Btn theme={theme} label="Open workspace" onPress={() => onOpenWorkspace(r)} /> : null}
               <Btn theme={theme} label="Open agent" onPress={() => onOpenAgent(r.agentId)} />
             </View>
           ))}
@@ -188,7 +190,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
         config: { provider: PROVIDER, modeId: MODE },
         prompt: launchPrompt(item),
         });
-      await change((d) => addRun(d, item.id, agent.id, Date.now()));
+      await change((d) => addRun(d, item.id, agent.id, Date.now(), workspace.id));
       navigation?.openAgent({ agentId: agent.id, serverId: host.id });
     } catch (e) {
       toast.error(`Could not start the agent: ${msg(e)}`);
@@ -196,7 +198,40 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   }
 
   const doc: TodoDoc = settings.values;
-  const toggleDone = (i: Item) => change((d) => updateItem(d, i.id, { doneAt: i.doneAt ? undefined : Date.now() }));
+  // Runs saved before workspaceId was stored: ask the agent where it lives.
+  async function workspaceOf(r: Item["runs"][number]): Promise<string | null> {
+    if (r.workspaceId) return r.workspaceId;
+    const a = paseo.agents.ref(r.agentId);
+    await a.refresh();
+    return a.workspaceId;
+  }
+  // Best effort per run: an agent or workspace that is already gone must not block the rest.
+  async function archiveRuns(i: Item) {
+    const failed: string[] = [];
+    for (const r of i.runs) {
+      try {
+        const ws = await workspaceOf(r);
+        await paseo.agents.ref(r.agentId).archive();
+        if (ws) await paseo.workspaces.archive(ws);
+      } catch (e) {
+        failed.push(msg(e));
+      }
+    }
+    if (failed.length) toast.error(`Could not archive ${failed.length} of ${i.runs.length} runs: ${failed[0]}`);
+  }
+  async function toggleDone(i: Item) {
+    const ok = await change((d) => updateItem(d, i.id, { doneAt: i.doneAt ? undefined : Date.now() }));
+    if (ok && !i.doneAt) await archiveRuns(i);
+  }
+  async function openWorkspace(r: Item["runs"][number]) {
+    try {
+      const workspaceId = await workspaceOf(r);
+      if (!workspaceId) throw new Error("workspace not found");
+      navigation?.openWorkspace({ workspaceId, serverId: host.id });
+    } catch (e) {
+      toast.error(`Could not open the workspace: ${msg(e)}`);
+    }
+  }
   const kanban = view === "kanban";
   const shown = filterItems(doc.items, kanban ? "all" : status, range, Date.now());
   const columns: [Column, string][] = [["todo", "Todo"], ["progress", "In progress"], ["done", "Done"]];
@@ -257,7 +292,8 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   ) : current ? (
     <Card theme={theme} item={current} saveLabel="Save"
       onSave={(title, todo, prompt) => change((d) => updateItem(d, current.id, { title, todo, prompt }))}
-      onRun={() => setRunning(current)} onOpenAgent={(agentId) => navigation?.openAgent({ agentId, serverId: host.id })} onToggleDone={() => void toggleDone(current)} onDelete={() => void change((d) => removeItem(d, current.id)).then((ok) => ok && setOpen(null))} />
+      onRun={() => setRunning(current)} onOpenAgent={(agentId) => navigation?.openAgent({ agentId, serverId: host.id })}
+      onOpenWorkspace={navigation ? (r) => void openWorkspace(r) : undefined} onToggleDone={() => void toggleDone(current)} onDelete={() => void change((d) => removeItem(d, current.id)).then((ok) => ok && setOpen(null))} />
   ) : null;
 
   return (
