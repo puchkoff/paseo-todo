@@ -4,7 +4,7 @@ import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, createdAt, filterItems, itemTitle, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
+import { type Column, type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, todoSettings, updateItem } from "../shared/todo.ts";
 
 const FS = { title: 27, body: 18, small: 16 };
 const PROVIDER = "claude/claude-opus-5-5";
@@ -143,6 +143,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   const [running, setRunning] = useState<Item | null>(null);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [range, setRange] = useState<RangeFilter>("any");
+  const [view, setView] = useState<"list" | "kanban">("list");
   const [open, setOpenState] = useState<string | null>(loadOpen); // item id, "new", or null for the list
   const setOpen = (id: string | null) => { saveOpen(id); setOpenState(id); };
   const { list, error } = useProjects(running !== null);
@@ -177,7 +178,9 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
 
   const doc: TodoDoc = settings.values;
   const toggleDone = (i: Item) => change((d) => updateItem(d, i.id, { doneAt: i.doneAt ? undefined : Date.now() }));
-  const shown = filterItems(doc.items, status, range, Date.now());
+  const kanban = view === "kanban";
+  const shown = filterItems(doc.items, kanban ? "all" : status, range, Date.now());
+  const columns: [Column, string][] = [["todo", "Todo"], ["progress", "In progress"], ["done", "Done"]];
   const current = open && open !== "new" ? doc.items.find((i) => i.id === open) : undefined;
   const list_ = (
     <>
@@ -187,9 +190,28 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
         </Text>
         <Btn theme={theme} tone="pri" label="New task" onPress={() => setOpen("new")} />
       </View>
-      <Chips theme={theme} value={status} onChange={setStatus} options={[["all", "All"], ["open", "Open"], ["done", "Done"]]} />
+      <Chips theme={theme} value={view} onChange={setView} options={[["list", "List"], ["kanban", "Kanban"]]} />
+      {kanban ? null : <Chips theme={theme} value={status} onChange={setStatus} options={[["all", "All"], ["open", "Open"], ["done", "Done"]]} />}
       <Chips theme={theme} value={range} onChange={setRange} options={[["any", "Any time"], ["today", "Today"], ["week", "7 days"], ["month", "30 days"]]} />
-      {shown.map((i) => (
+      {kanban ? (
+        <View style={{ flexDirection: layout.compact ? "column" : "row", gap: 10, alignItems: "flex-start" }}>
+          {columns.map(([col, label]) => {
+            const cards = shown.filter((i) => columnOf(i) === col);
+            return (
+              <View key={col} style={{ flex: 1, width: "100%", gap: 8, padding: 8, borderRadius: 10, backgroundColor: c.surface1 }}>
+                <Text style={{ color: c.foregroundMuted, fontSize: FS.small, fontWeight: "600" }}>{label} · {cards.length}</Text>
+                {cards.map((i) => (
+                  <Pressable key={i.id} accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
+                    style={{ gap: 4, padding: 12, borderRadius: 8, backgroundColor: c.surface2 }}>
+                    <Text style={{ color: c.foreground, fontSize: FS.body }} numberOfLines={3}>{itemTitle(i)}</Text>
+                    <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{new Date(createdAt(i)).toLocaleDateString()}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            );
+          })}
+        </View>
+      ) : shown.map((i) => (
         <View key={i.id} style={{ flexDirection: "row", gap: 6, alignItems: "center", borderRadius: 10, backgroundColor: c.surface1 }}>
           <Pressable accessibilityRole="checkbox" accessibilityLabel={i.doneAt ? `Reopen ${itemTitle(i)}` : `Mark ${itemTitle(i)} done`} accessibilityState={{ checked: !!i.doneAt }} onPress={() => void toggleDone(i)}
             style={{ padding: 14 }}>
@@ -216,7 +238,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   ) : null;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 24, gap: 12, maxWidth: 860, width: "100%", alignSelf: "center" }}>
+    <ScrollView style={{ flex: 1, backgroundColor: c.surface0 }} contentContainerStyle={{ padding: layout.compact ? 16 : 24, gap: 12, maxWidth: kanban && !card ? 1200 : 860, width: "100%", alignSelf: "center" }}>
       {card ? (
         <>
           <View style={{ flexDirection: "row" }}><Btn theme={theme} label="← Tasks" onPress={() => setOpen(null)} /></View>

@@ -54,3 +54,8 @@ export function filterItems(items: Item[], status: StatusFilter, range: RangeFil
   const since = { any: 0, today: new Date(now).setHours(0, 0, 0, 0), week: now - 7 * DAY, month: now - 30 * DAY }[range];
   return items.filter((i) => (status === "all" || (status === "done") === !!i.doneAt) && createdAt(i) >= since);
 }
+
+// Kanban column, derived: done beats started (has a run), everything else is todo.
+export type Column = "todo" | "progress" | "done";
+export const columnOf = (i: Pick<Item, "doneAt" | "runs" | "launchedAt">): Column =>
+  i.doneAt ? "done" : i.runs.length || i.launchedAt ? "progress" : "todo";

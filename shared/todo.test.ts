@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addItem, addRun, createdAt, filterItems, itemTitle, launchPrompt, removeItem, updateItem } from "./todo.ts";
+import { type Item, addItem, addRun, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, updateItem } from "./todo.ts";
 
 test("add puts the newest first, update and remove target one id", () => {
   let d = addItem({ items: [] }, { id: "a", title: "A", todo: "A", prompt: "", runs: [] });
@@ -42,4 +42,12 @@ test("created time comes from the id and filters combine with status", () => {
   assert.deepEqual(filterItems(all, "all", "week", now), [today, week]);
   assert.deepEqual(filterItems(all, "done", "any", now), [old]);
   assert.deepEqual(filterItems(all, "open", "month", now), [today, week]);
+});
+
+test("columnOf: done beats started, started beats todo", () => {
+  const base = { runs: [] as Item["runs"] };
+  assert.equal(columnOf(base), "todo");
+  assert.equal(columnOf({ ...base, launchedAt: 1 }), "progress");
+  assert.equal(columnOf({ runs: [{ agentId: "a", at: 1 }] }), "progress");
+  assert.equal(columnOf({ runs: [{ agentId: "a", at: 1 }], doneAt: 2 }), "done");
 });

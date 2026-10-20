@@ -7,3 +7,5 @@ Each task can be marked done, and the list filters by status (all, open, done) a
 Run asks which project to use, creates a new workspace in that project directory, and starts a Claude agent in it with the prompt, or with the todo text when the prompt is empty.
 
 Each Run is remembered on the task: its card lists the agents started from it, with a button to open each one. Runs started before this was added have no agent link. The task you had open is reopened the next time you visit the screen.
+
+A List/Kanban switch shows the tasks as three columns: Todo (not started), In progress (has a run, not done) and Done. A task moves by Run and Mark done/Reopen; the columns are derived, nothing extra is stored. The time filter applies to both views.
