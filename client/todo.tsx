@@ -19,6 +19,24 @@ function saveOpen(id: string | null) {
   lastOpen = id;
   if (id) store?.setItem(OPEN_KEY, id); else store?.removeItem(OPEN_KEY);
 }
+// List filters, kept the same way; unknown saved values fall back to the defaults.
+const FILTERS_KEY = "paseo-todo.filters";
+interface Filters { view: "list" | "kanban"; status: StatusFilter; range: RangeFilter }
+const DEFAULT_FILTERS: Filters = { view: "list", status: "all", range: "any" };
+const FILTER_VALUES: { [K in keyof Filters]: readonly Filters[K][] } = {
+  view: ["list", "kanban"], status: ["all", "open", "done"], range: ["any", "today", "week", "month"],
+};
+let lastFilters = DEFAULT_FILTERS;
+function loadFilters(): Filters {
+  let saved: Partial<Record<keyof Filters, unknown>> = lastFilters;
+  try { saved = JSON.parse(store?.getItem(FILTERS_KEY) ?? "null") ?? lastFilters; } catch { /* corrupt entry */ }
+  const pick = <K extends keyof Filters>(k: K): Filters[K] => (FILTER_VALUES[k] as readonly unknown[]).includes(saved[k]) ? (saved[k] as Filters[K]) : DEFAULT_FILTERS[k];
+  return { view: pick("view"), status: pick("status"), range: pick("range") };
+}
+function saveFilters(f: Filters) {
+  lastFilters = f;
+  store?.setItem(FILTERS_KEY, JSON.stringify(f));
+}
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function Btn({ theme, label, tone = "plain", disabled, onPress }: { theme: PluginTheme; label: string; tone?: "pri" | "bad" | "plain"; disabled?: boolean; onPress: () => void }) {
@@ -161,9 +179,9 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   const paseo = usePaseo();
   const toast = useToast();
   const [running, setRunning] = useState<Item | null>(null);
-  const [status, setStatus] = useState<StatusFilter>("all");
-  const [range, setRange] = useState<RangeFilter>("any");
-  const [view, setView] = useState<"list" | "kanban">("list");
+  const [filters, setFilters] = useState(loadFilters);
+  const { view, status, range } = filters;
+  const setFilter = <K extends keyof Filters>(k: K, v: Filters[K]) => { const next = { ...filters, [k]: v }; saveFilters(next); setFilters(next); };
   const [open, setOpenState] = useState<string | null>(loadOpen); // item id, "new", or null for the list
   const setOpen = (id: string | null) => { saveOpen(id); setOpenState(id); };
   const { list, error } = useProjects(running !== null);
@@ -251,9 +269,9 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
         </Text>
         <Btn theme={theme} tone="pri" label="New task" onPress={() => setOpen("new")} />
       </View>
-      <Chips theme={theme} value={view} onChange={setView} options={[["list", "List"], ["kanban", "Kanban"]]} />
-      <Chips theme={theme} value={status} onChange={setStatus} options={[["all", "All"], ["done", "Done"], ["open", "Not done"]]} />
-      <Chips theme={theme} value={range} onChange={setRange} options={[["any", "Any time"], ["today", "Today"], ["week", "7 days"], ["month", "30 days"]]} />
+      <Chips theme={theme} value={view} onChange={(v) => setFilter("view", v)} options={[["list", "List"], ["kanban", "Kanban"]]} />
+      <Chips theme={theme} value={status} onChange={(v) => setFilter("status", v)} options={[["all", "All"], ["done", "Done"], ["open", "Not done"]]} />
+      <Chips theme={theme} value={range} onChange={(v) => setFilter("range", v)} options={[["any", "Any time"], ["today", "Today"], ["week", "7 days"], ["month", "30 days"]]} />
       {kanban ? (
         <View style={{ flexDirection: layout.compact ? "column" : "row", gap: 10, alignItems: "flex-start" }}>
           {columns.map(([col, label]) => {
