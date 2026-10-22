@@ -27,8 +27,9 @@ export const autoPrompt = defineRpc({
 });
 
 export const addItem = (d: TodoDoc, item: Item): TodoDoc => ({ items: [item, ...d.items] });
+// Undefined patch values drop the key: settings are saved as z.json(), which rejects `undefined`.
 export const updateItem = (d: TodoDoc, id: string, patch: Partial<Omit<Item, "id">>): TodoDoc => ({
-  items: d.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
+  items: d.items.map((i) => (i.id === id ? (Object.fromEntries(Object.entries({ ...i, ...patch }).filter(([, v]) => v !== undefined)) as Item) : i)),
 });
 // Appends to the stored runs, so concurrent launches of one task both survive.
 export const addRun = (d: TodoDoc, id: string, agentId: string, at: number, workspaceId?: string): TodoDoc => ({

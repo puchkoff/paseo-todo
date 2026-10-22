@@ -12,6 +12,11 @@ test("add puts the newest first, update and remove target one id", () => {
   assert.deepEqual(removeItem(d, "b").items.map((i) => i.id), ["a"]);
 });
 
+test("update with undefined removes the key so the doc stays JSON-valid", () => {
+  const d = updateItem({ items: [{ id: "a", title: "", todo: "A", prompt: "", runs: [], doneAt: 5 }] }, "a", { doneAt: undefined });
+  assert.equal("doneAt" in d.items[0], false);
+});
+
 test("runs accumulate per task and stamp launchedAt", () => {
   let d = addItem({ items: [] }, { id: "a", title: "", todo: "A", prompt: "", runs: [] });
   d = addRun(addRun(d, "a", "ag1", 1), "a", "ag2", 2, "ws2");
