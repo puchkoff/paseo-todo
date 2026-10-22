@@ -233,7 +233,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
     }
   }
   const kanban = view === "kanban";
-  const shown = filterItems(doc.items, kanban ? "all" : status, range, Date.now());
+  const shown = filterItems(doc.items, status, range, Date.now());
   const columns: [Column, string][] = [["todo", "Todo"], ["progress", "In progress"], ["done", "Done"]];
   const current = open && open !== "new" ? doc.items.find((i) => i.id === open) : undefined;
   const list_ = (
@@ -245,7 +245,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
         <Btn theme={theme} tone="pri" label="New task" onPress={() => setOpen("new")} />
       </View>
       <Chips theme={theme} value={view} onChange={setView} options={[["list", "List"], ["kanban", "Kanban"]]} />
-      {kanban ? null : <Chips theme={theme} value={status} onChange={setStatus} options={[["all", "All"], ["open", "Open"], ["done", "Done"]]} />}
+      <Chips theme={theme} value={status} onChange={setStatus} options={[["all", "All"], ["done", "Done"], ["open", "Not done"]]} />
       <Chips theme={theme} value={range} onChange={setRange} options={[["any", "Any time"], ["today", "Today"], ["week", "7 days"], ["month", "30 days"]]} />
       {kanban ? (
         <View style={{ flexDirection: layout.compact ? "column" : "row", gap: 10, alignItems: "flex-start" }}>
