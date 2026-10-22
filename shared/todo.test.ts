@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Item, addItem, addRun, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, runningCount, updateItem } from "./todo.ts";
+import { type Item, addItem, addRun, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, runningCount, setDone, updateItem } from "./todo.ts";
 
 test("add puts the newest first, update and remove target one id", () => {
   let d = addItem({ items: [] }, { id: "a", title: "A", todo: "A", prompt: "", runs: [] });
@@ -10,6 +10,13 @@ test("add puts the newest first, update and remove target one id", () => {
   assert.equal(d.items[1].prompt, "do A");
   assert.equal(d.items[0].prompt, "");
   assert.deepEqual(removeItem(d, "b").items.map((i) => i.id), ["a"]);
+});
+
+test("setDone flips only the given ids and keeps existing doneAt", () => {
+  const mk = (id: string, doneAt?: number) => ({ id, title: "", todo: id, prompt: "", runs: [], doneAt });
+  const d = { items: [mk("a"), mk("b", 5), mk("c")] };
+  assert.deepEqual(setDone(d, new Set(["a", "b"]), 9).items.map((i) => i.doneAt), [9, 5, undefined]);
+  assert.deepEqual(setDone(d, new Set(["a", "b"]), undefined).items.map((i) => i.doneAt), [undefined, undefined, undefined]);
 });
 
 test("runs accumulate per task and stamp launchedAt", () => {

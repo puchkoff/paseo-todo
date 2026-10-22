@@ -34,7 +34,11 @@ export const updateItem = (d: TodoDoc, id: string, patch: Partial<Omit<Item, "id
 export const addRun = (d: TodoDoc, id: string, agentId: string, at: number, workspaceId?: string): TodoDoc => ({
   items: d.items.map((i) => (i.id === id ? { ...i, launchedAt: at, runs: [...i.runs, { agentId, at, workspaceId }] } : i)),
 });
-export const removeItem = (d: TodoDoc, id: string): TodoDoc => ({ items: d.items.filter((i) => i.id !== id) });
+// Done flag for many items at once; items already in the target state keep their original doneAt.
+export const setDone = (d: TodoDoc, ids: ReadonlySet<string>, doneAt: number | undefined): TodoDoc => ({
+  items: d.items.map((i) => (ids.has(i.id) && !i.doneAt !== !doneAt ? { ...i, doneAt } : i)),
+});
+export const removeItem =(d: TodoDoc, id: string): TodoDoc => ({ items: d.items.filter((i) => i.id !== id) });
 
 // Auto-prompt needs a todo; Run needs a prompt, falling back to the todo text.
 export const launchPrompt = (i: Pick<Item, "todo" | "prompt">): string => (i.prompt.trim() || i.todo.trim());
