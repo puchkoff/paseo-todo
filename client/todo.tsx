@@ -4,7 +4,7 @@ import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { type Column, type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, runningCount, setDone, todoSettings, updateItem } from "../shared/todo.ts";
+import { type Column, type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, runningCount, todoSettings, updateItem } from "../shared/todo.ts";
 
 const FS = { title: 27, body: 18, small: 16 };
 const PROVIDER = "claude/claude-opus-5-5";
@@ -223,13 +223,6 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
     const ok = await change((d) => updateItem(d, i.id, { doneAt: i.doneAt ? undefined : Date.now() }));
     if (ok && !i.doneAt) await archiveRuns(i);
   }
-  // Applies to the tasks currently shown (after filters).
-  async function markAll(items: Item[], done: boolean) {
-    const ids = new Set(items.map((i) => i.id));
-    const flipped = items.filter((i) => !i.doneAt === done);
-    const ok = await change((d) => setDone(d, ids, done ? Date.now() : undefined));
-    if (ok && done) for (const i of flipped) await archiveRuns(i);
-  }
   async function openWorkspace(r: Item["runs"][number]) {
     try {
       const workspaceId = await workspaceOf(r);
@@ -254,12 +247,6 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
       <Chips theme={theme} value={view} onChange={setView} options={[["list", "List"], ["kanban", "Kanban"]]} />
       {kanban ? null : <Chips theme={theme} value={status} onChange={setStatus} options={[["all", "All"], ["open", "Open"], ["done", "Done"]]} />}
       <Chips theme={theme} value={range} onChange={setRange} options={[["any", "Any time"], ["today", "Today"], ["week", "7 days"], ["month", "30 days"]]} />
-      {shown.length ? (
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <Btn theme={theme} label="All done" onPress={() => void markAll(shown, true)} />
-          <Btn theme={theme} label="All not done" onPress={() => void markAll(shown, false)} />
-        </View>
-      ) : null}
       {kanban ? (
         <View style={{ flexDirection: layout.compact ? "column" : "row", gap: 10, alignItems: "flex-start" }}>
           {columns.map(([col, label]) => {
