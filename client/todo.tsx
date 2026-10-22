@@ -232,6 +232,13 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
       toast.error(`Could not open the workspace: ${msg(e)}`);
     }
   }
+  // Tick/un-tick; un-ticking reopens the task.
+  const tick = (i: Item) => (
+    <Pressable accessibilityRole="checkbox" accessibilityLabel={i.doneAt ? `Reopen ${itemTitle(i)}` : `Mark ${itemTitle(i)} done`} accessibilityState={{ checked: !!i.doneAt }} onPress={() => void toggleDone(i)}
+      style={{ padding: 14 }}>
+      <Text style={{ color: i.doneAt ? c.statusSuccess : c.foregroundMuted, fontSize: FS.body + 4 }}>{i.doneAt ? "☑" : "☐"}</Text>
+    </Pressable>
+  );
   const kanban = view === "kanban";
   const shown = filterItems(doc.items, status, range, Date.now());
   const columns: [Column, string][] = [["todo", "Todo"], ["progress", "In progress"], ["done", "Done"]];
@@ -255,14 +262,17 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
               <View key={col} style={{ flex: 1, width: "100%", gap: 8, padding: 8, borderRadius: 10, backgroundColor: c.surface1 }}>
                 <Text style={{ color: c.foregroundMuted, fontSize: FS.small, fontWeight: "600" }}>{label} · {cards.length}</Text>
                 {cards.map((i) => (
-                  <Pressable key={i.id} accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
-                    style={{ gap: 4, padding: 12, borderRadius: 8, backgroundColor: c.surface2 }}>
-                    <Text style={{ color: c.foreground, fontSize: FS.body }} numberOfLines={3}>{itemTitle(i)}</Text>
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                      <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{new Date(createdAt(i)).toLocaleDateString()}</Text>
-                      <Live theme={theme} n={runningCount(i, live)} />
-                    </View>
-                  </Pressable>
+                  <View key={i.id} style={{ flexDirection: "row", alignItems: "flex-start", borderRadius: 8, backgroundColor: c.surface2 }}>
+                    {tick(i)}
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
+                      style={{ flex: 1, gap: 4, paddingVertical: 12, paddingRight: 12 }}>
+                      <Text style={{ color: i.doneAt ? c.foregroundMuted : c.foreground, fontSize: FS.body, textDecorationLine: i.doneAt ? "line-through" : "none" }} numberOfLines={3}>{itemTitle(i)}</Text>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <Text style={{ color: c.foregroundMuted, fontSize: FS.small }}>{new Date(createdAt(i)).toLocaleDateString()}</Text>
+                        <Live theme={theme} n={runningCount(i, live)} />
+                      </View>
+                    </Pressable>
+                  </View>
                 ))}
               </View>
             );
@@ -270,10 +280,7 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
         </View>
       ) : shown.map((i) => (
         <View key={i.id} style={{ flexDirection: "row", gap: 6, alignItems: "center", borderRadius: 10, backgroundColor: c.surface1 }}>
-          <Pressable accessibilityRole="checkbox" accessibilityLabel={i.doneAt ? `Reopen ${itemTitle(i)}` : `Mark ${itemTitle(i)} done`} accessibilityState={{ checked: !!i.doneAt }} onPress={() => void toggleDone(i)}
-            style={{ padding: 14 }}>
-            <Text style={{ color: i.doneAt ? c.statusSuccess : c.foregroundMuted, fontSize: FS.body + 4 }}>{i.doneAt ? "☑" : "☐"}</Text>
-          </Pressable>
+          {tick(i)}
           <Pressable accessibilityRole="button" accessibilityLabel={`Open ${itemTitle(i)}`} onPress={() => setOpen(i.id)}
             style={{ flex: 1, flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 14, paddingRight: 14 }}>
             <Text style={{ color: i.doneAt ? c.foregroundMuted : c.foreground, fontSize: FS.body, flex: 1, textDecorationLine: i.doneAt ? "line-through" : "none" }} numberOfLines={1}>{itemTitle(i)}</Text>
