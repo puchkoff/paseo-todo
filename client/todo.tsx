@@ -2,7 +2,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { type Column, type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, runningCount, todoSettings, updateItem } from "../shared/todo.ts";
 
@@ -186,6 +186,14 @@ export function TodoScreen({ theme, host, layout, navigation }: PluginScreenProp
   const setOpen = (id: string | null) => { saveOpen(id); setOpenState(id); };
   const { list, error } = useProjects(running !== null);
   const live = useRunningAgents();
+  // Agents add todos through the MCP tool, which the daemon does not push; re-read on the list view only, so an open form is not reset.
+  const reload = useRef(settings.reload);
+  reload.current = settings.reload;
+  useEffect(() => {
+    if (open !== null) return;
+    const t = setInterval(() => void reload.current(), 5000);
+    return () => clearInterval(t);
+  }, [open]);
 
   if (settings.status === "loading") return <Text style={{ color: c.foregroundMuted, fontSize: FS.body, padding: 24 }}>Loading…</Text>;
   if (settings.status !== "ready") {

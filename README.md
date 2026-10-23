@@ -11,6 +11,7 @@ Keeps a list of tasks, each with a short todo and a prompt. **Run** creates a wo
 - 🟢 marks a task with a running agent. The screen polls every 5 s.
 - Marking a task done archives its runs' agents and workspaces (best effort).
 - **Auto-prompt** writes the prompt with the `claude` CLI on the daemon (Sonnet, no tools, no saved session); the todo text is sent to Anthropic.
+- **Agents can add tasks:** every new agent gets `add_todo` and `list_todos` (MCP server `todo`, pre-approved). The task is written straight to the daemon's todo store, and the open screen picks it up within 5 s. Only agents started after the plugin loads have the tools.
 
 Todos are stored per daemon.
 

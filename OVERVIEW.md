@@ -13,3 +13,5 @@ A List/Kanban switch shows the tasks as three columns: Todo (not started), In pr
 A 🟢 on a task (list row or kanban card) means one of its agents is running now; a number shows when several are. The screen polls the host every 5 s.
 
 Marking a task done archives the agents and workspaces of all its runs (best effort; failures are toasted). Reopen does not restore them. Runs started before the workspace id was stored look it up from the agent.
+
+Every new agent also gets two tools, `add_todo` and `list_todos` (MCP server `todo`, pre-approved), so an agent can park a follow-up here instead of doing it now. The task appears on the list within 5 s. Agents that were already running when the plugin loaded do not have the tools.
