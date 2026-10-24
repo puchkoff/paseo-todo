@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
-import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
+import { Modal, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { type Column, type Item, type RangeFilter, type StatusFilter, type TodoDoc, addItem, addRun, autoPrompt, columnOf, createdAt, filterItems, itemTitle, launchPrompt, removeItem, runningCount, todoSettings, updateItem } from "../shared/todo.ts";
