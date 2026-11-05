@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" width="96" alt="Todo logo"></p>
+
 # Todo — a Paseo plugin
 
 ![Todo: Paseo plugin screen (illustration)](docs/hero.svg)
